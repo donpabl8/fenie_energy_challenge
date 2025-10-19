@@ -130,45 +130,53 @@ elif page == "💬 Asistente RAG":
     st.title("💬 Asistente RAG (Ricky Gervais Edition)")
     st.caption("Haz preguntas sobre los correos o el dataset. Ricky te responderá con sarcasmo y contexto.")
 
+    # Initialize session
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    user_input = st.chat_input("Escribe tu pregunta aquí...")
+    # --- Display chat history ---
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "user":
+            with st.chat_message("user"):
+                st.markdown(msg["content"])
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(msg["content"])
+                if "context" in msg and msg["context"]:
+                    with st.expander("📬 Contexto recuperado"):
+                        st.markdown(msg["context"])
 
-    if user_input:
+    # --- User input ---
+    if prompt := st.chat_input("Escribe tu pregunta aquí..."):
+        # Display user's message
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
-            st.markdown(user_input)
+            st.markdown(prompt)
 
-        # Recuperar contexto desde Qdrant
+        # --- Retrieve context from Qdrant ---
         with st.spinner("Buscando mails relevantes..."):
-            context = query_qdrant(user_input)
+            context = query_qdrant(prompt)
 
         formatted_context = "\n\n".join(
             [f"Mail {i+1}:\n{chunk}" for i, chunk in enumerate(context)]
         )
 
-        with st.expander("📬 Contexto recuperado"):
-            st.markdown(formatted_context if formatted_context else "Sin contexto relevante.")
-
-        # Capturar respuesta del modelo (redirigiendo el print)
+        # --- Generate model response ---
         import io, sys
         buffer = io.StringIO()
         sys.stdout = buffer
-        send_user_message(user_input, retrieved_context=context)
+        send_user_message(prompt, retrieved_context=context)
         sys.stdout = sys.__stdout__
         model_response = buffer.getvalue().strip()
 
+        # --- Display assistant message ---
         with st.chat_message("assistant"):
             st.markdown(model_response)
+            if context:
+                with st.expander("📬 Contexto recuperado"):
+                    st.markdown(formatted_context)
+            else:
+                st.caption("Sin contexto relevante.")
 
-        st.session_state.chat_history.append({
-            "user": user_input,
-            "assistant": model_response
-        })
-
-    if st.session_state.chat_history:
-        with st.expander("🕰️ Historial de conversación"):
-            for msg in st.session_state.chat_history:
-                st.markdown(f"**Tú:** {msg['user']}")
-                st.markdown(f"**Ricky:** {msg['assistant']}")
-                st.markdown("---")
+        # Store assistant reply
+        st.session_state.chat_history.append({"role": "assistant", "content": model_response})
