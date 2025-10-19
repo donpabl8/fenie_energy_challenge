@@ -44,7 +44,7 @@ model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
 # print(operation_info)
 
-# print(f"✅ Inserted {len(points)} emails into Qdrant collection '{collection_name}'")
+# print(f" Inserted {len(points)} emails into Qdrant collection '{collection_name}'")
 
 
 # --- RUN A QUERY ---
