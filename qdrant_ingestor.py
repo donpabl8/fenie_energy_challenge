@@ -49,7 +49,7 @@ model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
 # --- RUN A QUERY ---
 
-query = "conexion a internet"
+query = "hay algun correo de quejas?"
 
 query_vector = model.encode(query).tolist()
 
