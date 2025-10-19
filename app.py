@@ -4,8 +4,8 @@ from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 import os
+import uuid
 
-# --- Importa tu lógica RAG + Ricky ---
 from rag_llm import query_qdrant, send_user_message, history
 
 # --- Setup ---
@@ -16,6 +16,10 @@ api_key = os.getenv("QDRANT_API_KEY")
 client = QdrantClient(url=url, api_key=api_key)
 model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 collection_name = "emailclassification_test"
+
+df = pd.read_csv("emails_clasificados.csv")
+df_original = df.copy()
+filtered_df = df_original.copy()
 
 st.set_page_config(page_title="Email Classifier Dashboard", layout="wide")
 
@@ -32,16 +36,33 @@ if page == "📊 Dashboard":
     # --- Sidebar filters ---
     st.sidebar.header("Filtros de búsqueda")
     search_text = st.sidebar.text_input("Buscar por texto (semántico)", "")
+
     selected_label = st.sidebar.selectbox(
         "Filtrar por etiqueta",
         options=["All", "queja", "petición de servicio", "sugerencia de mejora"]
     )
 
-    # --- Load CSV ---
-    df = pd.read_csv("emails_clasificados.csv")
+    if "Fecha" in filtered_df.columns:
+        st.sidebar.markdown("### Filtro por fecha")
+        filtered_df["Fecha"] = pd.to_datetime(filtered_df["Fecha"], errors="coerce", infer_datetime_format=True)
+
+        valid_dates = filtered_df["Fecha"].dropna()
+
+        if not valid_dates.empty:
+            min_date, max_date = valid_dates.min(), valid_dates.max()
+        else:
+            min_date, max_date = pd.Timestamp.now() - pd.Timedelta(days=30), pd.Timestamp.now()
+
+        start_date, end_date = st.sidebar.date_input("Rango de fechas:", [min_date.date(), max_date.date()])
+
+        if isinstance(start_date, list) or isinstance(start_date, tuple):
+            start_date, end_date = start_date
+
+        filtered_df = filtered_df[(filtered_df["Fecha"] >= pd.to_datetime(start_date)) & (filtered_df["Fecha"] <= pd.to_datetime(end_date))]
+
 
     if selected_label != "All":
-        df = df[df["etiqueta_predicha"] == selected_label]
+        filtered_df = filtered_df[filtered_df["etiqueta_predicha"] == selected_label]
 
     # --- Semantic search section ---
     if search_text:
@@ -60,9 +81,47 @@ if page == "📊 Dashboard":
             st.caption(f"Etiqueta: {r.payload['label']} | Confianza: {r.payload['confidence']:.2f}")
             st.divider()
 
+    st.subheader("📩 Añadir o actualizar correos")
+
+    with st.form("add_email_form"):
+        new_text = st.text_area("Escribe el texto del nuevo correo:")
+        new_mail = st.text_area("Escribe el correo del remitente:")
+        new_label = st.selectbox("Etiqueta (si se conoce):", ["queja", "petición de servicio", "sugerencia de mejora", "desconocida"])
+        submitted = st.form_submit_button("Guardar correo")
+
+        if submitted and new_text.strip():
+            # Generar embedding
+            new_vector = model.encode(new_text).tolist()
+
+            # Crear registro nuevo
+            new_row = {
+                "Descripción": new_text,
+                "etiqueta_predicha": new_label,
+                "Email": new_mail,
+                "confianza": 1.0 if new_label != "desconocida" else 0.0,
+                "Fecha": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+            # Añadir a DataFrame y guardar CSV
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            df.to_csv("emails_clasificados.csv", index=False)
+
+            # Insertar en Qdrant
+            client.upsert(
+                collection_name=collection_name,
+                points=[{
+                    "id": str(uuid.uuid4()),
+                    "vector": new_vector,
+                    "payload": {"text": new_text, "label": new_label, "confidence": new_row["confianza"]}
+                }]
+            )
+
+            st.success("Correo añadido y guardado correctamente.")
+
     # --- Main table ---
     st.subheader("📊 Todos los emails")
-    st.dataframe(df[["etiqueta_predicha", "confianza", "Descripción"]])
+    st.dataframe(filtered_df[["etiqueta_predicha", "confianza", "Descripción"]])
+
 
 # ====================================================
 # 💬 ASISTENTE RAG (Ricky Gervais)

@@ -124,5 +124,5 @@ if __name__ == "__main__":
 
         # Enviar mensaje al modelo con contexto
         send_user_message(user_input, retrieved_context=context)
-        print('\n')
-        print(context)
+        # print('\n')
+        # print(context)
