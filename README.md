@@ -52,7 +52,7 @@ pip install streamlit qdrant-client sentence-transformers openai python-dotenv t
 ```
 
 ### 4. Add your environment variables
-Create a `.env` file in the project root:
+Create a `.env` file in the project root. **Please note that without these, the project will very likely not work**:
 ```
 QDRANT_URL=<your-qdrant-endpoint>
 QDRANT_API_KEY=<your-qdrant-api-key>
